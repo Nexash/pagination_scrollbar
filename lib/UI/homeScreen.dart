@@ -59,7 +59,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text("Product Details")),
+      // appBar: AppBar(title: Text("Product Details")),
       body: Stack(
         children: [
           Column(

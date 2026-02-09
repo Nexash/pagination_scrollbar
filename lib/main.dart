@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:pagination/Controller/auth_controller.dart';
 import 'package:pagination/Network/dio_client.dart';
 import 'package:pagination/Service/auth_service.dart';
-import 'package:pagination/UI/homeScreen.dart';
+import 'package:pagination/UI/sliver_homeScreen.dart';
 import 'package:provider/provider.dart';
 
 void main() {
@@ -30,7 +30,7 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
       ),
-      home: HomeScreen(),
+      home: SliverHomescreen(),
     );
   }
 }
