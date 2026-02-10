@@ -76,50 +76,47 @@ class AuthController extends ChangeNotifier {
 
   Future<void> onSearchChanged(String query) async {
     log("on search change called");
-    if (_debounce?.isActive ?? false) _debounce!.cancel();
 
-    _debounce = Timer(const Duration(seconds: 2), () async {
-      if (query.isEmpty) {
-        suggestions = [];
-        isLoadingsearch = false;
-        notifyListeners();
-        return;
-      }
-      if (query != oldvalue) {
-        suggestions = [];
-        skip = 0;
-        hasMore = true;
-      }
-      oldvalue = query;
-      isLoadingsearch = true;
+    if (query.isEmpty) {
+      suggestions = [];
+      isLoadingsearch = false;
       notifyListeners();
-
-      try {
-        final response = await _authService.productSearch(limit, skip, query);
-        final List rawList = response['products'];
-        final int totalProducts = response['total'];
-        await Future.delayed(const Duration(seconds: 1));
-        final newItems =
-            rawList.map((item) {
-              return ProductModal.fromJson(item as Map<String, dynamic>);
-            }).toList();
-        suggestions.addAll(newItems);
-        if (suggestions.length >= totalProducts) {
-          hasMore = false;
-        }
-        log(hasMore.toString());
-        log("search");
-        log(productDetails.length.toString());
-        skip += newItems.length;
-
-        isLoadingsearch = false;
-        notifyListeners();
-      } catch (e) {
-        isLoadingsearch = false;
-        notifyListeners();
-        print("Error fetching data: $e");
-      }
       return;
-    });
+    }
+    if (query != oldvalue) {
+      suggestions = [];
+      skip = 0;
+      hasMore = true;
+    }
+    oldvalue = query;
+    isLoadingsearch = true;
+    notifyListeners();
+
+    try {
+      final response = await _authService.productSearch(limit, skip, query);
+      final List rawList = response['products'];
+      final int totalProducts = response['total'];
+      await Future.delayed(const Duration(seconds: 1));
+      final newItems =
+          rawList.map((item) {
+            return ProductModal.fromJson(item as Map<String, dynamic>);
+          }).toList();
+      suggestions.addAll(newItems);
+      if (suggestions.length >= totalProducts) {
+        hasMore = false;
+      }
+      log(hasMore.toString());
+      log("search");
+      log(productDetails.length.toString());
+      skip += newItems.length;
+
+      isLoadingsearch = false;
+      notifyListeners();
+    } catch (e) {
+      isLoadingsearch = false;
+      notifyListeners();
+      print("Error fetching data: $e");
+    }
+    return;
   }
 }

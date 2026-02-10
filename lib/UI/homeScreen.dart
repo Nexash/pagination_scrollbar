@@ -3,6 +3,7 @@ import 'dart:developer';
 
 import 'package:flutter/material.dart';
 import 'package:pagination/Controller/auth_controller.dart';
+import 'package:pagination/Helper/overlay_dropdown.dart';
 import 'package:provider/provider.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -14,8 +15,10 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final ScrollController _scrollController = ScrollController();
+  final SearchOverlayController _overlayController = SearchOverlayController();
   bool isScrollable = false;
   final TextEditingController searchController = TextEditingController();
+  List<String> filteredData = [];
 
   FocusNode keyboardFocus = FocusNode();
   Timer? _debounce;
@@ -95,78 +98,132 @@ class _HomeScreenState extends State<HomeScreen> {
                       horizontal: 20,
                       vertical: 10,
                     ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Consumer<AuthController>(
-                            builder: (context, controller, child) {
-                              return TextField(
-                                controller: searchController,
-                                focusNode: keyboardFocus,
-                                onChanged: (value) async {
-                                  typedValue = value;
-                                  if (_scrollController.hasClients) {
-                                    _scrollController.jumpTo(0);
-                                  }
-                                  if (isScrollable) {
-                                    setState(() {
-                                      isScrollable = false;
-                                    });
-                                  }
-                                  await controller.onSearchChanged(value);
+                    child: Consumer<AuthController>(
+                      builder: (context, controller, child) {
+                        return CompositedTransformTarget(
+                          link: _overlayController.layerLink,
+                          child: TextField(
+                            controller: searchController,
+                            focusNode: keyboardFocus,
+                            onChanged: (value) async {
+                              final String currentQuery = value;
+                              typedValue = value;
+
+                              if (_scrollController.hasClients) {
+                                _scrollController.jumpTo(0);
+                              }
+
+                              if (isScrollable) {
+                                setState(() => isScrollable = false);
+                              }
+
+                              if (value.isEmpty) {
+                                _debounce?.cancel();
+                                _overlayController.hideOverlay();
+                                return;
+                              }
+
+                              _overlayController.showOverlay(
+                                context: context,
+                                items: [],
+                                isLoading: true,
+                                onItemSelected: (selected) {
+                                  searchController.text = selected;
+                                  _overlayController.hideOverlay();
                                 },
-                                decoration: InputDecoration(
-                                  fillColor: Colors.blueGrey,
-                                  hintText: "Search Product...",
-                                  hintStyle: TextStyle(
-                                    color: Colors.black,
-                                    fontSize: 14,
-                                  ),
-                                  enabledBorder: OutlineInputBorder(
-                                    borderSide: BorderSide(
-                                      color: Colors.black,
-                                      width: 2,
-                                    ),
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  focusedBorder: OutlineInputBorder(
-                                    borderSide: BorderSide(
-                                      color: Colors.black,
-                                      width: 2,
-                                    ),
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                ),
+                              );
+
+                              if (_debounce?.isActive ?? false)
+                                _debounce!.cancel();
+
+                              _debounce = Timer(
+                                const Duration(milliseconds: 1000),
+                                () async {
+                                  await controller.onSearchChanged(
+                                    currentQuery,
+                                  );
+
+                                  if (searchController.text == currentQuery &&
+                                      typedValue.isNotEmpty) {
+                                    _overlayController.showOverlay(
+                                      context: context,
+                                      items: controller.suggestions,
+                                      isLoading: false,
+                                      onItemSelected: (selected) {
+                                        setState(() {
+                                          searchController.text = selected;
+                                          typedValue = selected;
+                                        });
+                                        _overlayController.hideOverlay();
+                                      },
+                                    );
+                                  } else {
+                                    log(
+                                      "Skipped showing overlay for outdated query: $currentQuery",
+                                    );
+                                  }
+                                },
                               );
                             },
-                          ),
-                        ),
-                        // SizedBox(width: 10),
-                        IconButton(
-                          onPressed: () {
-                            setState(() {
-                              searchController.clear();
-                              isScrollable = false;
-                              _scrollController.animateTo(
-                                0,
-                                duration: Duration(milliseconds: 500),
-                                curve: Curves.fastOutSlowIn,
-                              );
-                            });
-                          },
-                          icon: Icon(Icons.clear_rounded),
-                          style: IconButton.styleFrom(
-                            backgroundColor: const Color.fromARGB(
-                              255,
-                              223,
-                              23,
-                              9,
+                            decoration: InputDecoration(
+                              isDense: true,
+                              fillColor: Colors.blueGrey,
+                              hintText: "Search Product...",
+                              suffixIcon: IconButton(
+                                onPressed: () {
+                                  setState(() {
+                                    searchController.clear();
+                                    isScrollable = false;
+                                    _scrollController.animateTo(
+                                      0,
+                                      duration: Duration(milliseconds: 500),
+                                      curve: Curves.fastOutSlowIn,
+                                    );
+                                    _overlayController.hideOverlay();
+                                    keyboardFocus.unfocus();
+                                  });
+                                },
+                                icon: Icon(Icons.clear_rounded, size: 30),
+                                style: IconButton.styleFrom(
+                                  padding: EdgeInsets.zero,
+                                  minimumSize: Size(10, 10),
+                                  backgroundColor: Colors.transparent,
+
+                                  foregroundColor: const Color.fromARGB(
+                                    255,
+                                    238,
+                                    10,
+                                    10,
+                                  ),
+                                  hoverColor: Colors.grey[300],
+                                ),
+                              ),
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: 26,
+                                vertical: 10,
+                              ),
+                              hintStyle: TextStyle(
+                                color: Colors.black,
+                                fontSize: 14,
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderSide: BorderSide(
+                                  color: Colors.black,
+                                  width: 2,
+                                ),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderSide: BorderSide(
+                                  color: Colors.black,
+                                  width: 2,
+                                ),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
                             ),
-                            foregroundColor: Colors.white,
-                            hoverColor: Colors.grey[300],
                           ),
-                        ),
-                      ],
+                        );
+                      },
                     ),
                   ),
                   SizedBox(
