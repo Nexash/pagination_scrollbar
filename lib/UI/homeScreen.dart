@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:developer';
 
 import 'package:flutter/material.dart';
@@ -14,6 +15,13 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final ScrollController _scrollController = ScrollController();
   bool isScrollable = false;
+  final TextEditingController searchController = TextEditingController();
+
+  FocusNode keyboardFocus = FocusNode();
+  Timer? _debounce;
+
+  String typedValue = "";
+  String prevValue = "";
 
   @override
   void initState() {
@@ -28,8 +36,11 @@ class _HomeScreenState extends State<HomeScreen> {
         );
 
         if (!authController.isLoading && authController.hasMore) {
+          prevValue = typedValue;
           log("Reached bottom, loading more...");
-          authController.getProductData();
+          searchController.text.isEmpty
+              ? authController.getProductData()
+              : authController.onSearchChanged(typedValue);
         }
       }
 
@@ -47,97 +58,202 @@ class _HomeScreenState extends State<HomeScreen> {
         }
       }
     });
+    if (prevValue != typedValue) {
+      setState(() {
+        isScrollable = false;
+      });
+    }
   }
 
   @override
   void dispose() {
     _scrollController.dispose();
-
+    keyboardFocus.dispose();
+    _debounce?.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      // appBar: AppBar(title: Text("Product Details")),
-      body: Stack(
-        children: [
-          Column(
+    return GestureDetector(
+      onTap: () {
+        FocusScope.of(context).unfocus();
+      },
+      child: Scaffold(
+        backgroundColor: Colors.deepPurple[200],
+        appBar: AppBar(
+          title: Center(child: Text("Product Details")),
+          backgroundColor: Colors.deepPurple[300],
+        ),
+        body: SingleChildScrollView(
+          child: Stack(
             children: [
-              SizedBox(
-                height: MediaQuery.of(context).size.height * 0.8,
-                child: Consumer<AuthController>(
-                  builder: (context, controller, child) {
-                    final products = controller.productDetails;
-                    if (controller.isLoading &&
-                        controller.productDetails.isEmpty) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-
-                    return RefreshIndicator(
-                      color: Colors.white,
-                      backgroundColor: Colors.blue,
-                      strokeWidth: 4.0,
-                      onRefresh: () async {
-                        await controller.refreshProducts();
-                      },
-                      child: Scrollbar(
-                        thumbVisibility: true,
-                        controller: _scrollController,
-                        thickness: 8.0,
-                        radius: const Radius.circular(10),
-                        interactive: true,
-                        child: ListView.builder(
-                          controller: _scrollController,
-                          // physics: const AlwaysScrollableScrollPhysics(),
-                          itemCount:
-                              products.length + (controller.hasMore ? 1 : 0),
-                          itemBuilder: (context, index) {
-                            if (index == controller.productDetails.length) {
-                              return const Padding(
-                                padding: EdgeInsets.symmetric(vertical: 32),
-                                child: Center(
-                                  child: CircularProgressIndicator(),
+              Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 10,
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Consumer<AuthController>(
+                            builder: (context, controller, child) {
+                              return TextField(
+                                controller: searchController,
+                                focusNode: keyboardFocus,
+                                onChanged: (value) async {
+                                  typedValue = value;
+                                  if (_scrollController.hasClients) {
+                                    _scrollController.jumpTo(0);
+                                  }
+                                  if (isScrollable) {
+                                    setState(() {
+                                      isScrollable = false;
+                                    });
+                                  }
+                                  await controller.onSearchChanged(value);
+                                },
+                                decoration: InputDecoration(
+                                  fillColor: Colors.blueGrey,
+                                  hintText: "Search Product...",
+                                  hintStyle: TextStyle(
+                                    color: Colors.black,
+                                    fontSize: 14,
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderSide: BorderSide(
+                                      color: Colors.black,
+                                      width: 2,
+                                    ),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderSide: BorderSide(
+                                      color: Colors.black,
+                                      width: 2,
+                                    ),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
                                 ),
                               );
-                            }
-                            return ListTile(
-                              title: Text(
-                                "${products[index].id} ${products[index].title}",
-                              ),
-                              subtitle: Text(products[index].category),
-                              trailing: Text(products[index].price.toString()),
-                            );
-                          },
+                            },
+                          ),
                         ),
-                      ),
-                    );
-                  },
-                ),
+                        // SizedBox(width: 10),
+                        IconButton(
+                          onPressed: () {
+                            setState(() {
+                              searchController.clear();
+                              isScrollable = false;
+                              _scrollController.animateTo(
+                                0,
+                                duration: Duration(milliseconds: 500),
+                                curve: Curves.fastOutSlowIn,
+                              );
+                            });
+                          },
+                          icon: Icon(Icons.clear_rounded),
+                          style: IconButton.styleFrom(
+                            backgroundColor: const Color.fromARGB(
+                              255,
+                              223,
+                              23,
+                              9,
+                            ),
+                            foregroundColor: Colors.white,
+                            hoverColor: Colors.grey[300],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  SizedBox(
+                    height: MediaQuery.of(context).size.height * 0.7,
+                    child: Consumer<AuthController>(
+                      builder: (context, controller, child) {
+                        final products =
+                            searchController.text.isEmpty
+                                ? controller.productDetails
+                                : controller.suggestions;
+                        if (controller.isLoading && products.isEmpty) {
+                          return Center(child: CircularProgressIndicator());
+                        }
+
+                        return RefreshIndicator(
+                          color: Colors.white,
+                          backgroundColor: Colors.blue,
+                          strokeWidth: 4.0,
+                          onRefresh: () async {
+                            typedValue.isEmpty
+                                ? await controller.refreshProducts()
+                                : await controller.refreshSearchedProducts(
+                                  typedValue,
+                                );
+                          },
+                          child: Scrollbar(
+                            thumbVisibility: true,
+                            controller: _scrollController,
+                            thickness: 8.0,
+                            radius: const Radius.circular(10),
+                            interactive: true,
+                            child: ListView.builder(
+                              controller: _scrollController,
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              itemCount:
+                                  products.length +
+                                  (controller.hasMore ? 1 : 0),
+                              itemBuilder: (context, index) {
+                                if (index == products.length) {
+                                  return const Padding(
+                                    padding: EdgeInsets.symmetric(vertical: 32),
+                                    child: Center(
+                                      child: CircularProgressIndicator(),
+                                    ),
+                                  );
+                                }
+                                return ListTile(
+                                  title: Text(
+                                    "${products[index].id} ${products[index].title}",
+                                  ),
+                                  subtitle: Text(products[index].category),
+                                  trailing: Text(
+                                    products[index].price.toString(),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
               ),
+
+              isScrollable
+                  ? Positioned(
+                    top: 80,
+                    left: MediaQuery.of(context).size.width / 2 - 30,
+                    child: FloatingActionButton(
+                      backgroundColor: const Color.fromARGB(255, 219, 216, 216),
+                      onPressed: () {
+                        if (_scrollController.hasClients) {
+                          _scrollController.animateTo(
+                            0,
+                            duration: Duration(milliseconds: 500),
+                            curve: Curves.fastOutSlowIn,
+                          );
+                        }
+                      },
+                      child: Icon(Icons.arrow_upward, color: Colors.black),
+                    ),
+                  )
+                  : const SizedBox.shrink(),
             ],
           ),
-
-          isScrollable
-              ? Positioned(
-                top: 5,
-                left: MediaQuery.of(context).size.width / 2 - 20,
-                child: FloatingActionButton(
-                  backgroundColor: const Color.fromARGB(255, 219, 216, 216),
-                  onPressed: () {
-                    if (_scrollController.hasClients) {
-                      _scrollController.animateTo(
-                        0,
-                        duration: Duration(milliseconds: 500),
-                        curve: Curves.fastOutSlowIn,
-                      );
-                    }
-                  },
-                  child: Icon(Icons.arrow_upward, color: Colors.black),
-                ),
-              )
-              : const SizedBox.shrink(),
-        ],
+        ),
       ),
     );
   }

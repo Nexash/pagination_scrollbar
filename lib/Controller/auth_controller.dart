@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:developer';
 
 import 'package:flutter/material.dart';
@@ -8,10 +9,14 @@ class AuthController extends ChangeNotifier {
   final AuthService _authService;
   String? errorMessage;
   int skip = 0;
-  int limit = 97;
+  int limit = 10;
   bool hasMore = true;
+  Timer? _debounce;
+  String oldvalue = "";
 
   bool isLoading = false;
+
+  bool isLoadingsearch = false;
   AuthController(this._authService) {
     getProductData();
   }
@@ -23,9 +28,19 @@ class AuthController extends ChangeNotifier {
     await getProductData();
   }
 
+  Future<void> refreshSearchedProducts(String value) async {
+    suggestions.clear();
+    hasMore = true;
+    skip = 0;
+    limit = 10;
+    await onSearchChanged(value);
+  }
+
   List<ProductModal> productDetails = [];
+  List<ProductModal> suggestions = [];
 
   Future<bool> getProductData() async {
+    log("get products called");
     isLoading = true;
     errorMessage = null;
     notifyListeners();
@@ -44,7 +59,7 @@ class AuthController extends ChangeNotifier {
         hasMore = false;
       }
       log(hasMore.toString());
-
+      log("MAin");
       log(productDetails.length.toString());
       skip += newItems.length;
 
@@ -59,32 +74,52 @@ class AuthController extends ChangeNotifier {
     }
   }
 
-  //  Future<bool> getProductData() async {
-  //   isLoading = true;
-  //   errorMessage = null;
-  //   notifyListeners();
-  //   try {
-  //     //Get the full Map (the one starting with "products": [...])
-  //     final response = await _authService.productDetails();
+  Future<void> onSearchChanged(String query) async {
+    log("on search change called");
+    if (_debounce?.isActive ?? false) _debounce!.cancel();
 
-  //     //Dig into the Map to get the List hidden under the 'products' key
-  //     // We cast it to List so we can use .map()
-  //     final List rawList = response['products'];
+    _debounce = Timer(const Duration(seconds: 2), () async {
+      if (query.isEmpty) {
+        suggestions = [];
+        isLoadingsearch = false;
+        notifyListeners();
+        return;
+      }
+      if (query != oldvalue) {
+        suggestions = [];
+        skip = 0;
+        hasMore = true;
+      }
+      oldvalue = query;
+      isLoadingsearch = true;
+      notifyListeners();
 
-  //     //Convert that raw list into your ProductModal list
-  //     productDetails =
-  //         rawList.map((item) {
-  //           return ProductModal.fromJson(item as Map<String, dynamic>);
-  //         }).toList();
+      try {
+        final response = await _authService.productSearch(limit, skip, query);
+        final List rawList = response['products'];
+        final int totalProducts = response['total'];
+        await Future.delayed(const Duration(seconds: 1));
+        final newItems =
+            rawList.map((item) {
+              return ProductModal.fromJson(item as Map<String, dynamic>);
+            }).toList();
+        suggestions.addAll(newItems);
+        if (suggestions.length >= totalProducts) {
+          hasMore = false;
+        }
+        log(hasMore.toString());
+        log("search");
+        log(productDetails.length.toString());
+        skip += newItems.length;
 
-  //     isLoading = false;
-  //     notifyListeners();
-  //     return true;
-  //   } catch (e) {
-  //     isLoading = false;
-  //     errorMessage = e.toString();
-  //     notifyListeners();
-  //     return false;
-  //   }
-  // }
+        isLoadingsearch = false;
+        notifyListeners();
+      } catch (e) {
+        isLoadingsearch = false;
+        notifyListeners();
+        print("Error fetching data: $e");
+      }
+      return;
+    });
+  }
 }

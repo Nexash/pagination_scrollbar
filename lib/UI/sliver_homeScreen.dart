@@ -80,11 +80,28 @@ class _SliverHomescreenState extends State<SliverHomescreen> {
                 slivers: [
                   const SliverAppBar(
                     pinned: true,
-                    expandedHeight: 50,
+                    stretch: true,
+                    expandedHeight: 300,
+                    elevation: 0,
+                    centerTitle: false,
                     backgroundColor: Color.fromARGB(255, 129, 88, 199),
                     flexibleSpace: FlexibleSpaceBar(
-                      title: Text("Sliver Home Screen"),
-                      centerTitle: true,
+                      title: Text(
+                        "Sliver Home Screen",
+                        style: TextStyle(
+                          color: Color.fromARGB(255, 233, 235, 239),
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      // 2. This creates a nice animation where the title moves as you scroll
+                      titlePadding: EdgeInsetsDirectional.only(
+                        start: 16,
+                        bottom: 16,
+                      ),
+                      background: Image(
+                        image: AssetImage('assets/Images/Background.png'),
+                        fit: BoxFit.cover,
+                      ),
                     ),
                   ),
                   Consumer<AuthController>(
